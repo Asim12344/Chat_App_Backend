@@ -1,5 +1,0 @@
-aiohttp==3.7.4.post0
-multidict==5.1.0
-python-engineio==3.9.0
-python-socketio==4.5.0
-
