@@ -11,7 +11,7 @@ from django.core.cache import cache
 from django.conf import settings
 from django.core.cache.backends.base import DEFAULT_TIMEOUT
  
-CACHE_TTL = getattr(settings, 'CACHE_TTL', DEFAULT_TIMEOUT)
+# CACHE_TTL = getattr(settings, 'CACHE_TTL', DEFAULT_TIMEOUT)
 
 class TokenAuth(AuthBase):
     """Implements a custom authentication scheme."""
@@ -111,11 +111,11 @@ def disconnect(sid):
 @sio.event
 def offer(sid,payload):
     # print('Message from {}: {}'.format(sid, data))
-    cache.set('sdp',payload,timeout=CACHE_TTL)
+    # cache.set('sdp',payload,timeout=CACHE_TTL)
 
-    test = cache.get('sdp')
-    print("test")
-    print(test)
+    # test = cache.get('sdp')
+    # print("test")
+    # print(test)
     print("offer")
     print(payload)
     sio.emit('offer', payload , room=payload['target'])
