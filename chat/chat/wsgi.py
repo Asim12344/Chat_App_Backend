@@ -24,4 +24,4 @@ application = socketio.WSGIApp(sio, django_app)
 import eventlet
 import eventlet.wsgi
 
-eventlet.wsgi.server(eventlet.listen(('', 8000)), application)
+eventlet.wsgi.server(eventlet.listen(('localhost', 8000)), application)
