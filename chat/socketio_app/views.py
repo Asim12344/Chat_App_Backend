@@ -14,7 +14,6 @@ from django.core.cache.backends.base import DEFAULT_TIMEOUT
 # CACHE_TTL = getattr(settings, 'CACHE_TTL', DEFAULT_TIMEOUT)
 
 
-
 class TokenAuth(AuthBase):
     """Implements a custom authentication scheme."""
 
@@ -89,6 +88,7 @@ def join_room(sid, roomID):
         sio.emit('other_user', otherUser , room=sid)
         sio.emit('user_joined', sid , room=otherUser)
 
+
 @sio.event
 def join_room1(sid):
     print("join_room1")
@@ -96,23 +96,31 @@ def join_room1(sid):
         users.append(sid)
         print(users)
         sio.emit('no_user', users , room=sid)
-    else:
+    elif len(users) == 1:
         users.append(sid)
         print(users)
         sio.emit('other_user', users[0] , room=sid)
         sio.emit('user_joined', sid , room=users[0])
-
-
-
+    else:
+        users.append(sid)
+        print("else")
+        sio.emit('third_user' , room=sid)
 
 @sio.event
 def disconnect(sid):
+    print(sid)
+    print(type(sid))
     global users
-    users = []
+    print(users)
+    users.remove(sid)
+    print(users)
+    sio.emit('disconnect', users)
+    # if len(users) == 1:
+    #     print(users)
+    #     sio.emit('disconnect', users[0] , room=users[0])
     sio.leave_room(sid, ROOM)
     print('Disconnected', sid)
     
-
 
 @sio.event
 def offer(sid,payload):
@@ -125,6 +133,7 @@ def offer(sid,payload):
     print("offer")
     print(payload)
     sio.emit('offer', payload , room=payload['target'])
+
 
 @sio.event
 def answer(sid,payload):
