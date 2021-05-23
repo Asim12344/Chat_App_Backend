@@ -105,8 +105,11 @@ def join_room1(sid):
 
 @sio.event
 def disconnect(sid):
+    global users
+    users = []
     sio.leave_room(sid, ROOM)
     print('Disconnected', sid)
+    
 
 
 @sio.event
