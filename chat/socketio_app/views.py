@@ -89,6 +89,7 @@ def join_room(sid, roomID):
 
 @sio.event
 def join_room1(sid):
+    print("join_room1")
     if len(users) == 0:
         users.append(sid)
         print(users)
