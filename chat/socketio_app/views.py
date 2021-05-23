@@ -1,5 +1,5 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
+# from rest_framework.views import APIView
+# from rest_framework.response import Response
 import sys, os
 
 import socketio
@@ -13,19 +13,19 @@ from django.conf import settings
 from django.core.cache.backends.base import DEFAULT_TIMEOUT
 
 
-class TempCreateView(APIView):
-    def get(self, request, format=None):
-        data = self.request.query_params
-        try:
-            name = data['name'] 
-            print("======= TempCreateView Last =========")
-            print(name)
-            return Response({'success':'secc'})
-        except Exception as e:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            print(exc_type, fname, exc_tb.tb_lineno , e)
-            return Response({'error': e})
+# class TempCreateView(APIView):
+#     def get(self, request, format=None):
+#         data = self.request.query_params
+#         try:
+#             name = data['name'] 
+#             print("======= TempCreateView Last =========")
+#             print(name)
+#             return Response({'success':'secc'})
+#         except Exception as e:
+#             exc_type, exc_obj, exc_tb = sys.exc_info()
+#             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+#             print(exc_type, fname, exc_tb.tb_lineno , e)
+#             return Response({'error': e})
  
 # CACHE_TTL = getattr(settings, 'CACHE_TTL', DEFAULT_TIMEOUT)
 
