@@ -11,7 +11,7 @@ from django.core.cache.backends.base import DEFAULT_TIMEOUT
 
 
  
-# CACHE_TTL = getattr(settings, 'CACHE_TTL', DEFAULT_TIMEOUT)
+CACHE_TTL = getattr(settings, 'CACHE_TTL', DEFAULT_TIMEOUT)
 
 
 class TokenAuth(AuthBase):
@@ -41,10 +41,10 @@ def connect(sid, environ):
     sio.enter_room(sid, ROOM)
 
 @sio.event
-def connected(sid, token):
+def connected(sid, payload):
     print("connected")
-    print(token['token'])
-    token = 'Bearer ' + token['token']
+    print(payload['token'])
+    token = 'Bearer ' + payload['token']
     try:
         response = requests.post(config._Auth_URL, auth=TokenAuth(token)).json()
         print("response")
@@ -90,6 +90,44 @@ def join_room(sid, roomID):
 
 
 @sio.event
+def join_room2(sid,email):
+    global users
+    print("join_room2")
+    print(email)
+    if len(users) < 2:
+        obj = {}
+        obj = {"sid":sid, "email":email,"partner_sid":""}
+        users.append(obj)
+        print(users)
+        sio.emit('online_users', users)
+
+    else:
+        print("else")
+        obj = {}
+        obj = {"sid":sid, "email":email,"partner_sid":""}
+        users.append(obj)
+        print(users)
+        sio.emit('third_user' , room=sid)
+
+@sio.event
+def create_connection(sid,payload):
+    print("create_connection")
+    print(payload)
+    i=0
+    global users
+    for user in users:
+        if user['sid'] == payload[1]['sid']:
+            users[i]["partner_sid"]=payload[1]['target']
+        if user['sid'] == payload[0]['sid']:
+            users[i]["partner_sid"]=payload[0]['target']
+        i=i+1
+    
+    print(users)
+        
+    sio.emit('other_user', payload[1] , room=payload[0]['sid'])
+    sio.emit('user_joined', payload[0] , room=payload[1]['sid'])
+
+@sio.event
 def join_room1(sid):
     print("join_room1")
     if len(users) == 0:
@@ -112,24 +150,32 @@ def disconnect(sid):
     print(type(sid))
     global users
     print(users)
-    users.remove(sid)
-    print(users)
-    sio.emit('disconnect', users)
-    # if len(users) == 1:
-    #     print(users)
-    #     sio.emit('disconnect', users[0] , room=users[0])
+    i = 0
+    for user in users:
+        if user['sid'] == sid:
+            break
+        i=i+1
+    print(i)
+    if len(users) > 0:
+        temp = users[i]
+        print("temp = " , temp)
+        users.pop(i)
+        print(users)
+        sio.emit('disconnect', sid)
+        sio.emit('partner', room=temp['partner_sid'])
+   
     sio.leave_room(sid, ROOM)
     print('Disconnected', sid)
     
 
 @sio.event
 def offer(sid,payload):
-    # print('Message from {}: {}'.format(sid, data))
-    # cache.set('sdp',payload,timeout=CACHE_TTL)
+    print('Message from {}: {}'.format(sid, payload))
+    cache.set('sdp',payload,timeout=CACHE_TTL)
 
-    # test = cache.get('sdp')
-    # print("test")
-    # print(test)
+    test = cache.get('sdp')
+    print("test")
+    print(test)
     print("offer")
     print(payload)
     sio.emit('offer', payload , room=payload['target'])
