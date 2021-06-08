@@ -34,12 +34,14 @@ rooms = {}
 users = []
 ROOM = 'room'
 
+# This event assigns a unique sid to user
 @sio.event
 def connect(sid, environ):
     print('Connected', sid)
-    sio.emit('ready', room=ROOM, skip_sid=sid)
     sio.enter_room(sid, ROOM)
 
+# This event takes token as a parameter and validate wheater a token is correct or not and also
+# changes availability status to online
 @sio.event
 def connected(sid, payload):
     print("payload = " ,payload['token'])
@@ -73,26 +75,7 @@ def connected(sid, payload):
     except:
         print('Not Authentication except')
     
-
-@sio.event
-def join(sid,email):
-    global users
-    print("join")
-    print(email)
-    if len(users) < 2:
-        obj = {}
-        obj = {"sid":sid, "email":email,"partner_sid":""}
-        users.append(obj)
-        print(users)
-        sio.emit('online_users', users)
-    else:
-        print("else")
-        obj = {}
-        obj = {"sid":sid, "email":email,"partner_sid":""}
-        users.append(obj)
-        print(users)
-        sio.emit('third_user' , room=sid)
-
+# This event creates connection between two users and pass their sid's to their partners
 @sio.event
 def create_connection(sid,payload):
     print("create_connection")
@@ -115,6 +98,15 @@ def create_connection(sid,payload):
     sio.emit('other_user', payload[1] , room=payload[0]['sid'])
     sio.emit('user_joined', payload[0] , room=payload[1]['sid'])
 
+# LOBBY
+@sio.event
+def create_lobby(sid,payload):
+    print("create_lobby")
+    print(payload)
+    for socketId in payload:
+        sio.emit('lobby', payload , room=socketId)
+
+# This event changes availability status to offline and also remove entry from redis
 @sio.event
 def disconnect(sid):
     print(sid)
@@ -129,24 +121,22 @@ def disconnect(sid):
         "socketId":""
     }
     response1 = requests.post("https://devplay.gamergraph.io/chat/player/availability/update/", data=json.dumps(payload1), headers={"Authorization": "Bearer " + removed_record['token'], "Content-Type": "application/json"})
+    print("===========")
     print(response1.json())
+    print("============")
     sio.emit('partner', room=removed_record['partner_sid'])
     sio.leave_room(sid, ROOM)
     print('Disconnected', sid)
     
-
+# Offer event pass sid to his partner
 @sio.event
 def offer(sid,payload):
     print('Message from {}: {}'.format(sid, payload))
-    # cache.set('sdp',payload,timeout=CACHE_TTL)
-    # test = cache.get('sdp')
-    # print("test")
-    # print(test)
     print("offer")
     print(payload)
     sio.emit('offer', payload , room=payload['target'])
 
-
+# Answer event pass sid to his partner
 @sio.event
 def answer(sid,payload):
     print("answer")
