@@ -149,7 +149,36 @@
 #     print(payload)
 #     sio.emit('ice_candidate', payload['candidate'], room=payload['target'])
 
+
+import socketio_app.config as config
+import requests
+from requests.auth import AuthBase
+import json
+from django.core.cache import cache
+from django.conf import settings
+from django.core.cache.backends.base import DEFAULT_TIMEOUT
 import socket
+import json
+import time
+
+
+CACHE_TTL = getattr(settings, 'CACHE_TTL', DEFAULT_TIMEOUT)
+
+
+class TokenAuth(AuthBase):
+    """Implements a custom authentication scheme."""
+
+    def __init__(self, token):
+        print("init")
+        self.token = token
+ 
+    def __call__(self, r):
+        print("call")
+        """Attach an API token to a custom auth header."""
+        r.headers['Authorization'] = f'{self.token}'  # Python 3.6+
+        print(r)
+        return r
+
 s = socket.socket()         
 print ("Socket successfully created!")
 port = 8080
@@ -157,13 +186,152 @@ port = 8080
 s.bind(('', port))         
 print ("socket binded to %s" %(port)) 
 s.listen()     
+
+def tokenValidation(sid,payload):
+    print("connected: " , sid)
+    print("email: ", payload['email'])
+    print("token: ", payload['token'])
+    token = payload['token']
+    email = payload['email']
+    try:
+        response = requests.post(config._Auth_URL, auth=TokenAuth(token)).json()
+        print("response")
+        print(response)
+        response_Text  = json.dumps(response, sort_keys=True)
+        print("response_Text")
+        print(response_Text)
+        status = response_Text.find('token_not_valid')
+        print("status")
+        print(status)
+        if status == -1:
+            print('Authenticated')
+            payload1 = {
+                "availabilityStatus": "Online",
+                "socketId":sid
+            }
+            response1 = requests.post("https://devplay.gamergraph.io/chat/player/availability/update/", data=json.dumps(payload1), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+            print(response1.json())
+            obj = {"sid":sid, "email":email,"partner_sid":"","token":token}
+            cache.add(sid,obj,timeout=CACHE_TTL)
+            print("==============================")
+            print(cache.get(sid))
+            return True
+        else:
+            print('Not Authenticated else')
+            return False
+    except:
+        print('Not Authentication except')
+        return False
+
+def createConnection(sid,payload):
+    print("create_connection")
+    print(payload)
+    try:
+        caller_sid = payload['caller']['sid']
+        target_sid = payload['target']['sid']
+        print(caller_sid)
+        print(target_sid)
+
+        get_caller_record = cache.get(caller_sid)
+        print("get_caller_record = " , get_caller_record)
+        get_caller_record['partner_sid'] = target_sid
+        print("get_caller_record1 = " , get_caller_record)
+        cache.set(caller_sid,get_caller_record,timeout=CACHE_TTL)
+
+        get_target_record = cache.get(target_sid)
+        print("get_target_record = " , get_target_record)
+        get_target_record['partner_sid'] = caller_sid
+        print("get_target_record1 = " , get_target_record)
+        cache.set(target_sid,get_target_record,timeout=CACHE_TTL)
+        return True
+    except:
+        return False
+
+def disconnect(sid):
+    try:
+        print(sid)
+        print(type(sid))
+        removed_record = cache.get(sid)
+        print("======== disconnect ===========")
+        print(removed_record)
+        print(removed_record['token'])
+        cache.delete(sid)
+        payload1 = {
+            "availabilityStatus": "Offline",
+            "socketId":""
+        }
+        response1 = requests.post("https://devplay.gamergraph.io/chat/player/availability/update/", data=json.dumps(payload1), headers={"Authorization": "Bearer " + removed_record['token'], "Content-Type": "application/json"})
+        print("===========")
+        print(response1.json())
+        print("============")
+
+        print('Disconnected', sid)
+        return removed_record['partner_sid']
+    except:
+        return ""
+
 while True: 
     conn, addr = s.accept()     
     print ('Got connection from', addr )
     data = conn.recv(1024)
-    print(data)
-    client = "message from server" 
-    byt=client.encode()
+    payload = json.loads(data)
+    print("payload = " , payload)
 
-    # send a thank you message to the client. 
-    conn.send(byt) 
+    if payload['action'] == "tokenValidation":
+        is_true = tokenValidation(payload['sid'],payload['payload'])
+        print(is_true)
+        if is_true:
+            msgfromserver = {"sid": payload['sid'] , "action": "tokenValidation" , "payload": {"token":"correct","partner_sid":"","partner_email":"","sdp":"","candidate":""}}
+        else:
+            msgfromserver = {"sid": payload['sid'] , "action": "tokenValidation" , "payload": {"token":"incorrect","partner_sid":"","partner_email":"","sdp":"","candidate":""}}
+
+        dataServer = json.dumps(msgfromserver)
+        print("dataServer = " , dataServer)
+        byt=dataServer.encode()
+        conn.send(byt) 
+    if payload['action'] == 'createConnection':
+        is_true = createConnection(payload['sid'],payload['payload'])
+        if is_true:
+            msgfromserver = {"sid": payload['sid'] , "action": "other_user" , "payload": {"token":"" , "partner_sid":payload['payload']['target']['sid'],"partner_email":payload['payload']['target']['email'],"sdp":"","candidate":""}}
+            dataServer = json.dumps(msgfromserver)
+            print("dataServer = " , dataServer)
+            byt=dataServer.encode()
+            conn.send(byt) 
+            print("===============")
+            time.sleep(4)
+            msgfromserver1 = {"sid": payload['payload']['target']['sid'] , "action": "user_joined" , "payload": {"token":"" , "partner_sid":payload['sid'], "partner_email":payload['payload']['caller']['email'],"sdp":"","candidate":""}}
+            dataServer1 = json.dumps(msgfromserver1)
+            print("dataServer1 = " , dataServer1)
+            byt1=dataServer1.encode()
+            conn.send(byt1) 
+    if payload['action'] == 'offer':
+        print(payload['payload']['target']['sid'])
+        msgfromserver = {"sid": payload['payload']['target']['sid'] , "action": "offer" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":payload['payload']['sdp'],"candidate":""}}
+        dataServer = json.dumps(msgfromserver)
+        print("dataServer = " , dataServer)
+        byt=dataServer.encode()
+        conn.send(byt) 
+    if payload['action'] == 'answer':
+        print(payload['payload']['target']['sid'])
+        msgfromserver = {"sid": payload['payload']['target']['sid'] , "action": "answer" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":payload['payload']['sdp'],"candidate":""}}
+        dataServer = json.dumps(msgfromserver)
+        print("dataServer = " , dataServer)
+        byt=dataServer.encode()
+        conn.send(byt) 
+    if payload['action'] == 'ice_candidate':
+        print(payload['payload']['target']['sid'])
+        msgfromserver = {"sid": payload['payload']['target']['sid'] , "action": "ice_candidate" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":"" , "candidate":payload['payload']['candidate']}}
+        dataServer = json.dumps(msgfromserver)
+        print("dataServer = " , dataServer)
+        byt=dataServer.encode()
+        conn.send(byt) 
+    if payload['action'] == 'disconnect':
+        sid = payload['sid']
+        print(sid)
+        partner_sid = disconnect(sid)
+        print(partner_sid)
+        msgfromserver = {"sid": partner_sid , "action": "partner" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":"" , "candidate":""}}
+        dataServer = json.dumps(msgfromserver)
+        print("dataServer = " , dataServer)
+        byt=dataServer.encode()
+        conn.send(byt)
