@@ -194,7 +194,8 @@ def tokenValidation(sid,payload):
     token = payload['token']
     email = payload['email']
     try:
-        response = requests.post(config._Auth_URL, auth=TokenAuth(token)).json()
+        # response = requests.post(config._Auth_URL, auth=TokenAuth(token)).json()
+        response = requests.post(config._Auth_URL, headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"}).json()
         print("response")
         print(response)
         response_Text  = json.dumps(response, sort_keys=True)
