@@ -276,7 +276,7 @@ while True:
     data = conn.recv(1024)
     payload = json.loads(data)
     print("payload = " , payload)
-
+    # ================== Token tokenValidation ==================
     if payload['action'] == "tokenValidation":
         is_true = tokenValidation(payload['sid'],payload['payload'])
         print(is_true)
@@ -289,9 +289,11 @@ while True:
         print("dataServer = " , dataServer)
         byt=dataServer.encode()
         conn.send(byt) 
+    # ================== createConnection ==================
     if payload['action'] == 'createConnection':
         is_true = createConnection(payload['sid'],payload['payload'])
         if is_true:
+            # ======================== PAYLOAD ==========================
             msgfromserver = {"sid": payload['sid'] , "action": "other_user" , "payload": {"token":"" , "partner_sid":payload['payload']['target']['sid'],"partner_email":payload['payload']['target']['email'],"sdp":"","candidate":""}}
             dataServer = json.dumps(msgfromserver)
             print("dataServer = " , dataServer)
@@ -304,6 +306,7 @@ while True:
             print("dataServer1 = " , dataServer1)
             byt1=dataServer1.encode()
             conn.send(byt1) 
+    # ================== offer ==================
     if payload['action'] == 'offer':
         print(payload['payload']['target']['sid'])
         msgfromserver = {"sid": payload['payload']['target']['sid'] , "action": "offer" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":payload['payload']['sdp'],"candidate":""}}
@@ -311,6 +314,7 @@ while True:
         print("dataServer = " , dataServer)
         byt=dataServer.encode()
         conn.send(byt) 
+    # ================== answer ==================
     if payload['action'] == 'answer':
         print(payload['payload']['target']['sid'])
         msgfromserver = {"sid": payload['payload']['target']['sid'] , "action": "answer" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":payload['payload']['sdp'],"candidate":""}}
@@ -318,6 +322,7 @@ while True:
         print("dataServer = " , dataServer)
         byt=dataServer.encode()
         conn.send(byt) 
+    # ================== ice_candidate ==================
     if payload['action'] == 'ice_candidate':
         print(payload['payload']['target']['sid'])
         msgfromserver = {"sid": payload['payload']['target']['sid'] , "action": "ice_candidate" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":"" , "candidate":payload['payload']['candidate']}}
@@ -325,6 +330,7 @@ while True:
         print("dataServer = " , dataServer)
         byt=dataServer.encode()
         conn.send(byt) 
+    # ================== disconnect ==================
     if payload['action'] == 'disconnect':
         sid = payload['sid']
         print(sid)
