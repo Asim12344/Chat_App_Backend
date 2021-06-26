@@ -274,95 +274,96 @@ def disconnect(sid):
 while True: 
     conn, addr = s.accept()     
     print ('Got connection from', addr )
-    data = conn.recv(1024)
-    payload = json.loads(data)
-    print("payload = " , payload)
-    # ================== Token tokenValidation ==================
-    if payload['action'] == "tokenValidation":
-        is_true = tokenValidation(payload['sid'],payload['payload'])
-        print(is_true)
-        if is_true:
-            msgfromserver = {"sid": payload['sid'] , "action": "tokenValidation" , "payload": {"token":"correct","partner_sid":"","partner_email":"","sdp":"","candidate":""}}
-        else:
-            msgfromserver = {"sid": payload['sid'] , "action": "tokenValidation" , "payload": {"token":"incorrect","partner_sid":"","partner_email":"","sdp":"","candidate":""}}
+    while True:
+        data = conn.recv(1024)
+        payload = json.loads(data)
+        print("payload = " , payload)
+        # ================== Token tokenValidation ==================
+        if payload['action'] == "tokenValidation":
+            is_true = tokenValidation(payload['sid'],payload['payload'])
+            print(is_true)
+            if is_true:
+                msgfromserver = {"sid": payload['sid'] , "action": "tokenValidation" , "payload": {"token":"correct","partner_sid":"","partner_email":"","sdp":"","candidate":""}}
+            else:
+                msgfromserver = {"sid": payload['sid'] , "action": "tokenValidation" , "payload": {"token":"incorrect","partner_sid":"","partner_email":"","sdp":"","candidate":""}}
 
-        dataServer = json.dumps(msgfromserver)
-        print("dataServer = " , dataServer)
-        byt=dataServer.encode()
-        conn.send(byt) 
-    # ================== createConnection ==================
-    if payload['action'] == 'createConnection':
-        is_true = createConnection(payload['sid'],payload['payload'])
-        if is_true:
-            # ======================== PAYLOAD ==========================
-            msgfromserver = {"sid": payload['sid'] , "action": "other_user" , "payload": {"token":"" , "partner_sid":payload['payload']['target']['sid'],"partner_email":payload['payload']['target']['email'],"sdp":"","candidate":""}}
             dataServer = json.dumps(msgfromserver)
             print("dataServer = " , dataServer)
             byt=dataServer.encode()
             conn.send(byt) 
-            print("===============")
-            time.sleep(4)
-            msgfromserver1 = {"sid": payload['payload']['target']['sid'] , "action": "user_joined" , "payload": {"token":"" , "partner_sid":payload['sid'], "partner_email":payload['payload']['caller']['email'],"sdp":"","candidate":""}}
-            dataServer1 = json.dumps(msgfromserver1)
-            print("dataServer1 = " , dataServer1)
-            byt1=dataServer1.encode()
-            conn.send(byt1) 
-    # ================== offer ==================
-    if payload['action'] == 'offer':
-        print(payload['payload']['target']['sid'])
-        msgfromserver = {"sid": payload['payload']['target']['sid'] , "action": "offer" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":payload['payload']['sdp'],"candidate":""}}
-        dataServer = json.dumps(msgfromserver)
-        print("dataServer = " , dataServer)
-        byt=dataServer.encode()
-        conn.send(byt) 
-    # ================== answer ==================
-    if payload['action'] == 'answer':
-        print(payload['payload']['target']['sid'])
-        msgfromserver = {"sid": payload['payload']['target']['sid'] , "action": "answer" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":payload['payload']['sdp'],"candidate":""}}
-        dataServer = json.dumps(msgfromserver)
-        print("dataServer = " , dataServer)
-        byt=dataServer.encode()
-        conn.send(byt) 
-    # ================== ice_candidate ==================
-    if payload['action'] == 'ice_candidate':
-        print(payload['payload']['target']['sid'])
-        msgfromserver = {"sid": payload['payload']['target']['sid'] , "action": "ice_candidate" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":"" , "candidate":payload['payload']['candidate']}}
-        dataServer = json.dumps(msgfromserver)
-        print("dataServer = " , dataServer)
-        byt=dataServer.encode()
-        conn.send(byt) 
-    # ================== disconnect ==================
-    if payload['action'] == 'disconnect':
-        sid = payload['sid']
-        print(sid)
-        partner_sid = disconnect(sid)
-        print(partner_sid)
-        msgfromserver = {"sid": partner_sid , "action": "partner" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":"" , "candidate":""}}
-        dataServer = json.dumps(msgfromserver)
-        print("dataServer = " , dataServer)
-        byt=dataServer.encode()
-        conn.send(byt)
-    # ==================== Lobby =======================
-    if payload['action'] == 'lobby':
-        print(payload['payload']['members'])
-        i = 0
-        while i < len(payload['payload']['members']):
-            j = i + 1
-            print(j)
-            while j < len(payload['payload']['members']):
-                print("j = " , j)
-                msgfromserver = {"sid": payload['payload']['members'][i]['sid'] , "action": "other_user" , "payload": {"token":"" , "partner_sid":payload['payload']['members'][j]['sid'] ,"partner_email":payload['payload']['members'][j]['email'] ,"sdp":"","candidate":""}}
+        # ================== createConnection ==================
+        if payload['action'] == 'createConnection':
+            # is_true = createConnection(payload['sid'],payload['payload'])
+            if True:
+                # ======================== PAYLOAD ==========================
+                msgfromserver = {"sid": payload['sid'] , "action": "other_user" , "payload": {"token":"" , "partner_sid":payload['payload']['target']['sid'],"partner_email":payload['payload']['target']['email'],"sdp":"","candidate":""}}
                 dataServer = json.dumps(msgfromserver)
                 print("dataServer = " , dataServer)
                 byt=dataServer.encode()
                 conn.send(byt) 
-                
+                print("===============")
                 time.sleep(4)
-                msgfromserver1 = {"sid": payload['payload']['members'][j]['sid'] , "action": "user_joined" , "payload": {"token":"" , "partner_sid":payload['payload']['members'][i]['sid'], "partner_email":payload['payload']['members'][i]['email'],"sdp":"","candidate":""}}
+                msgfromserver1 = {"sid": payload['payload']['target']['sid'] , "action": "user_joined" , "payload": {"token":"" , "partner_sid":payload['sid'], "partner_email":payload['payload']['caller']['email'],"sdp":"","candidate":""}}
                 dataServer1 = json.dumps(msgfromserver1)
                 print("dataServer1 = " , dataServer1)
                 byt1=dataServer1.encode()
                 conn.send(byt1) 
-                print("===============")
-                j=j+1
-            i=i+1
+        # ================== offer ==================
+        if payload['action'] == 'offer':
+            print(payload['payload']['target']['sid'])
+            msgfromserver = {"sid": payload['payload']['target']['sid'] , "action": "offer" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":payload['payload']['sdp'],"candidate":""}}
+            dataServer = json.dumps(msgfromserver)
+            print("dataServer = " , dataServer)
+            byt=dataServer.encode()
+            conn.send(byt) 
+        # ================== answer ==================
+        if payload['action'] == 'answer':
+            print(payload['payload']['target']['sid'])
+            msgfromserver = {"sid": payload['payload']['target']['sid'] , "action": "answer" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":payload['payload']['sdp'],"candidate":""}}
+            dataServer = json.dumps(msgfromserver)
+            print("dataServer = " , dataServer)
+            byt=dataServer.encode()
+            conn.send(byt) 
+        # ================== ice_candidate ==================
+        if payload['action'] == 'ice_candidate':
+            print(payload['payload']['target']['sid'])
+            msgfromserver = {"sid": payload['payload']['target']['sid'] , "action": "ice_candidate" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":"" , "candidate":payload['payload']['candidate']}}
+            dataServer = json.dumps(msgfromserver)
+            print("dataServer = " , dataServer)
+            byt=dataServer.encode()
+            conn.send(byt) 
+        # ================== disconnect ==================
+        if payload['action'] == 'disconnect':
+            sid = payload['sid']
+            print(sid)
+            partner_sid = disconnect(sid)
+            print(partner_sid)
+            msgfromserver = {"sid": partner_sid , "action": "partner" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":"" , "candidate":""}}
+            dataServer = json.dumps(msgfromserver)
+            print("dataServer = " , dataServer)
+            byt=dataServer.encode()
+            conn.send(byt)
+        # ==================== Lobby =======================
+        if payload['action'] == 'lobby':
+            print(payload['payload']['members'])
+            i = 0
+            while i < len(payload['payload']['members']):
+                j = i + 1
+                print(j)
+                while j < len(payload['payload']['members']):
+                    print("j = " , j)
+                    msgfromserver = {"sid": payload['payload']['members'][i]['sid'] , "action": "other_user" , "payload": {"token":"" , "partner_sid":payload['payload']['members'][j]['sid'] ,"partner_email":payload['payload']['members'][j]['email'] ,"sdp":"","candidate":""}}
+                    dataServer = json.dumps(msgfromserver)
+                    print("dataServer = " , dataServer)
+                    byt=dataServer.encode()
+                    conn.send(byt) 
+                    
+                    time.sleep(4)
+                    msgfromserver1 = {"sid": payload['payload']['members'][j]['sid'] , "action": "user_joined" , "payload": {"token":"" , "partner_sid":payload['payload']['members'][i]['sid'], "partner_email":payload['payload']['members'][i]['email'],"sdp":"","candidate":""}}
+                    dataServer1 = json.dumps(msgfromserver1)
+                    print("dataServer1 = " , dataServer1)
+                    byt1=dataServer1.encode()
+                    conn.send(byt1) 
+                    print("===============")
+                    j=j+1
+                i=i+1
