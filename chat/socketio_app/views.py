@@ -293,8 +293,8 @@ while True:
             conn.send(byt) 
         # ================== createConnection ==================
         if payload['action'] == 'createConnection':
-            # is_true = createConnection(payload['sid'],payload['payload'])
-            if True:
+            is_true = createConnection(payload['sid'],payload['payload'])
+            if is_true:
                 # ======================== PAYLOAD ==========================
                 msgfromserver = {"sid": payload['sid'] , "action": "other_user" , "payload": {"token":"" , "partner_sid":payload['payload']['target']['sid'],"partner_email":payload['payload']['target']['email'],"sdp":"","candidate":""}}
                 dataServer = json.dumps(msgfromserver)
