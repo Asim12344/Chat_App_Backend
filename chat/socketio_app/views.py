@@ -160,6 +160,8 @@ from django.core.cache.backends.base import DEFAULT_TIMEOUT
 import socket
 import json
 import time
+from _thread import *
+
 
 
 CACHE_TTL = getattr(settings, 'CACHE_TTL', DEFAULT_TIMEOUT)
@@ -182,12 +184,14 @@ class TokenAuth(AuthBase):
 s = socket.socket()         
 print ("Socket successfully created!")
 port = 8080
+ThreadCount = 0
 
 s.bind(('', port))         
 print ("socket binded to %s" %(port)) 
 s.listen()     
+list_of_clients = [] 
 
-def tokenValidation(sid,payload):
+def tokenValidation(sid,payload,conn):
     print("connected: " , sid)
     print("email: ", payload['email'])
     print("token: ", payload['token'])
@@ -212,11 +216,15 @@ def tokenValidation(sid,payload):
             }
             response1 = requests.post("https://devplay.gamergraph.io/chat/player/availability/update/", data=json.dumps(payload1), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
             print(response1.json())
+            list_of_clients.append({sid:conn})
+            print("list_of_clients: " , list_of_clients)
             obj = {"sid":sid, "email":email,"partner_sid":"","token":token}
             cache.add(sid,obj,timeout=CACHE_TTL)
-            print("==============================")
+            print("=========== Redis Data ===================")
             print(cache.get(sid))
+            print("============End Redis Data ==================")
             return True
+
         else:
             print('Not Authenticated else')
             return False
@@ -244,43 +252,54 @@ def createConnection(sid,payload):
         get_target_record['partner_sid'] = caller_sid
         print("get_target_record1 = " , get_target_record)
         cache.set(target_sid,get_target_record,timeout=CACHE_TTL)
-        return True
+        return caller_sid,target_sid
     except:
         return False
 
 def disconnect(sid):
     try:
         print(sid)
-        print(type(sid))
-        removed_record = cache.get(sid)
-        print("======== disconnect ===========")
-        print(removed_record)
-        print(removed_record['token'])
-        cache.delete(sid)
+        try:
+            token = ""
+            partner_sid = ""
+            removed_record = cache.get(sid)
+            print("removed_record: " , removed_record)
+            if removed_record != None:
+                token = removed_record['token']
+                partner_sid = removed_record['partner_sid']
+            print("removed_record token: " , token)
+            cache.delete(sid)
+            print("====== Deleted record ===========")
+        except Exception as e:
+            print("redis error : " , e)
+        
         payload1 = {
             "availabilityStatus": "Offline",
             "socketId":""
         }
-        response1 = requests.post("https://devplay.gamergraph.io/chat/player/availability/update/", data=json.dumps(payload1), headers={"Authorization": "Bearer " + removed_record['token'], "Content-Type": "application/json"})
-        print("===========")
-        print(response1.json())
-        print("============")
+        try:
+            response1 = requests.post("https://devplay.gamergraph.io/chat/player/availability/update/", data=json.dumps(payload1), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+            print("===========")
+            print(response1.json())
+            print("===========")
+        except Exception as e:
+            print("API error: " ,e)
+            return ""
 
         print('Disconnected', sid)
-        return removed_record['partner_sid']
-    except:
+        return partner_sid
+    except Exception as e:
+        print("error : " ,e)
         return ""
 
-while True: 
-    conn, addr = s.accept()     
-    print ('Got connection from', addr )
+def threaded_client(conn):
     while True:
         data = conn.recv(1024)
         payload = json.loads(data)
-        print("payload = " , payload)
         # ================== Token tokenValidation ==================
         if payload['action'] == "tokenValidation":
-            is_true = tokenValidation(payload['sid'],payload['payload'])
+            print("==================== Start tokenValidation =========================")
+            is_true = tokenValidation(payload['sid'],payload['payload'],conn)
             print(is_true)
             if is_true:
                 msgfromserver = {"sid": payload['sid'] , "action": "tokenValidation" , "payload": {"token":"correct","partner_sid":"","partner_email":"","sdp":"","candidate":""}}
@@ -291,58 +310,122 @@ while True:
             print("dataServer = " , dataServer)
             byt=dataServer.encode()
             conn.send(byt) 
+            print("==================== End tokenValidation =========================")
         # ================== createConnection ==================
         if payload['action'] == 'createConnection':
-            is_true = createConnection(payload['sid'],payload['payload'])
-            if is_true:
-                # ======================== PAYLOAD ==========================
-                msgfromserver = {"sid": payload['sid'] , "action": "other_user" , "payload": {"token":"" , "partner_sid":payload['payload']['target']['sid'],"partner_email":payload['payload']['target']['email'],"sdp":"","candidate":""}}
-                dataServer = json.dumps(msgfromserver)
-                print("dataServer = " , dataServer)
-                byt=dataServer.encode()
-                conn.send(byt) 
-                print("===============")
-                time.sleep(4)
-                msgfromserver1 = {"sid": payload['payload']['target']['sid'] , "action": "user_joined" , "payload": {"token":"" , "partner_sid":payload['sid'], "partner_email":payload['payload']['caller']['email'],"sdp":"","candidate":""}}
-                dataServer1 = json.dumps(msgfromserver1)
-                print("dataServer1 = " , dataServer1)
-                byt1=dataServer1.encode()
-                conn.send(byt1) 
+            print("================== createConnection ==================" , list_of_clients)
+            caller_id,target_id = createConnection(payload['sid'],payload['payload'])
+            print("caller_id: ", caller_id)
+            print("target_id: " , target_id)
+            target_conn = None
+            for item in list_of_clients:
+                for key, value in item.items():
+                    if key == caller_id:
+                        caller_conn = value
+                    if key == target_id:
+                        target_conn = value
+            
+            print("caller_conn: " , caller_conn)
+            print("target_conn: " , target_conn)
+
+            # ======================== PAYLOAD ==========================
+            msgfromserver = {"sid": payload['sid'] , "action": "other_user" , "payload": {"token":"" , "partner_sid":payload['payload']['target']['sid'],"partner_email":payload['payload']['target']['email'],"sdp":"","candidate":""}}
+            dataServer = json.dumps(msgfromserver)
+            print("dataServer = " , dataServer)
+            byt=dataServer.encode()
+            caller_conn.send(byt) 
+            print("===============")
+            time.sleep(4)
+            msgfromserver1 = {"sid": payload['payload']['target']['sid'] , "action": "user_joined" , "payload": {"token":"" , "partner_sid":payload['sid'], "partner_email":payload['payload']['caller']['email'],"sdp":"","candidate":""}}
+            dataServer1 = json.dumps(msgfromserver1)
+            print("dataServer1 = " , dataServer1)
+            byt1=dataServer1.encode()
+            target_conn.send(byt1) 
+            print("================== End createConnection ==================")
         # ================== offer ==================
         if payload['action'] == 'offer':
+            print("=================== Offer ==============")
             print(payload['payload']['target']['sid'])
+            for item in list_of_clients:
+                for key, value in item.items():
+                    if key == payload['payload']['target']['sid']:
+                        target_conn = value
+
+            print("target_conn: " , target_conn)
             msgfromserver = {"sid": payload['payload']['target']['sid'] , "action": "offer" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":payload['payload']['sdp'],"candidate":""}}
             dataServer = json.dumps(msgfromserver)
             print("dataServer = " , dataServer)
             byt=dataServer.encode()
-            conn.send(byt) 
+            target_conn.send(byt) 
+            print("=================== End Offer ==============")
         # ================== answer ==================
         if payload['action'] == 'answer':
+            print("=================== Answer ==============")
             print(payload['payload']['target']['sid'])
+            for item in list_of_clients:
+                for key, value in item.items():
+                    if key == payload['payload']['target']['sid']:
+                        target_conn = value
+
+            print("target_conn: " , target_conn)
             msgfromserver = {"sid": payload['payload']['target']['sid'] , "action": "answer" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":payload['payload']['sdp'],"candidate":""}}
             dataServer = json.dumps(msgfromserver)
             print("dataServer = " , dataServer)
             byt=dataServer.encode()
-            conn.send(byt) 
+            target_conn.send(byt) 
+            print("=================== End Answer ==============")
         # ================== ice_candidate ==================
         if payload['action'] == 'ice_candidate':
-            print(payload['payload']['target']['sid'])
+            print("=================== ice_candidate ==============")
+            print("target_sid: " , payload['payload']['target']['sid'])
+            for item in list_of_clients:
+                for key, value in item.items():
+                    print("=== key , value ======" ,key, value)
+                    if key == payload['payload']['target']['sid']:
+                        target_conn = value
+
+            print("target_conn: " , target_conn)
             msgfromserver = {"sid": payload['payload']['target']['sid'] , "action": "ice_candidate" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":"" , "candidate":payload['payload']['candidate']}}
             dataServer = json.dumps(msgfromserver)
             print("dataServer = " , dataServer)
             byt=dataServer.encode()
-            conn.send(byt) 
+            target_conn.send(byt) 
+            print("=================== End ice_candidate ==============")
         # ================== disconnect ==================
         if payload['action'] == 'disconnect':
+            print("========== Disconnect ==============")
             sid = payload['sid']
-            print(sid)
+            print("sid: " , sid)
             partner_sid = disconnect(sid)
-            print(partner_sid)
-            msgfromserver = {"sid": partner_sid , "action": "partner" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":"" , "candidate":""}}
-            dataServer = json.dumps(msgfromserver)
-            print("dataServer = " , dataServer)
-            byt=dataServer.encode()
-            conn.send(byt)
+            print("=== partner_sid ==== " ,partner_sid)
+            target_conn = None
+            caller_conn = None
+            for item in list_of_clients:
+                for key, value in item.items():
+                    if key == partner_sid:
+                        target_conn = value
+                    if key == sid:
+                        caller_conn = value
+            
+            
+            print("caller_conn: " , caller_conn)
+            print("target_conn: " , target_conn)
+            # Remove from list_of_clients
+            obj = {sid:caller_conn}
+            print("obj :" , obj)
+            try:
+                list_of_clients.remove(obj)
+            except:
+                print("Not in the list")
+            print("============== list_of_clients ===========" , list_of_clients)
+            if target_conn:
+                msgfromserver = {"sid": partner_sid , "action": "partner" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":"" , "candidate":""}}
+                dataServer = json.dumps(msgfromserver)
+                print("dataServer = " , dataServer)
+                
+                byt=dataServer.encode()
+                target_conn.send(byt)
+            print("========= End Disconnect ===========")
         # ==================== Lobby =======================
         if payload['action'] == 'lobby':
             print(payload['payload']['members'])
@@ -366,4 +449,16 @@ while True:
                     conn.send(byt1) 
                     print("===============")
                     j=j+1
-                i=i+1
+                i=i+1       
+
+
+# sudo kill -9 $(sudo lsof -t -i:8080)
+
+while True: 
+    conn, addr = s.accept()     
+    
+    print ('Got connection from', addr )
+
+    start_new_thread(threaded_client, (conn, ))
+    ThreadCount += 1
+    print('Thread Number: ' + str(ThreadCount))
