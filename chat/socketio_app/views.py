@@ -428,6 +428,7 @@ def threaded_client(conn):
             print("========= End Disconnect ===========")
         # ==================== Lobby =======================
         if payload['action'] == 'lobby':
+            print("=============== Start Lobby ===================")
             print(payload['payload']['members'])
             i = 0
             while i < len(payload['payload']['members']):
@@ -435,21 +436,30 @@ def threaded_client(conn):
                 print(j)
                 while j < len(payload['payload']['members']):
                     print("j = " , j)
+                    target_conn = None
+                    caller_conn = None
+                    for item in list_of_clients:
+                        for key, value in item.items():
+                            if key == payload['payload']['members'][j]['sid']:
+                                target_conn = value
+                            if key == payload['payload']['members'][i]['sid']:
+                                caller_conn = value
                     msgfromserver = {"sid": payload['payload']['members'][i]['sid'] , "action": "other_user" , "payload": {"token":"" , "partner_sid":payload['payload']['members'][j]['sid'] ,"partner_email":payload['payload']['members'][j]['email'] ,"sdp":"","candidate":""}}
                     dataServer = json.dumps(msgfromserver)
                     print("dataServer = " , dataServer)
                     byt=dataServer.encode()
-                    conn.send(byt) 
+                    caller_conn.send(byt) 
                     
                     time.sleep(4)
                     msgfromserver1 = {"sid": payload['payload']['members'][j]['sid'] , "action": "user_joined" , "payload": {"token":"" , "partner_sid":payload['payload']['members'][i]['sid'], "partner_email":payload['payload']['members'][i]['email'],"sdp":"","candidate":""}}
                     dataServer1 = json.dumps(msgfromserver1)
                     print("dataServer1 = " , dataServer1)
                     byt1=dataServer1.encode()
-                    conn.send(byt1) 
+                    target_conn.send(byt1) 
                     print("===============")
                     j=j+1
                 i=i+1       
+            print("=============== End Lobby ===================")
 
 
 # sudo kill -9 $(sudo lsof -t -i:8080)
