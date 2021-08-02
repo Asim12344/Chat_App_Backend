@@ -190,13 +190,16 @@ s.bind(('', port))
 print ("socket binded to %s" %(port)) 
 s.listen()     
 list_of_clients = [] 
+rooms=[]
 
 def tokenValidation(sid,payload,conn):
     print("connected: " , sid)
     print("email: ", payload['email'])
     print("token: ", payload['token'])
+    print("gameKey: ", payload['gameKey'])
     token = payload['token']
     email = payload['email']
+    gameKey = payload['gameKey']
     try:
         # response = requests.post(config._Auth_URL, auth=TokenAuth(token)).json()
         response = requests.post(config._Auth_URL, headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"}).json()
@@ -212,9 +215,10 @@ def tokenValidation(sid,payload,conn):
             print('Authenticated')
             payload1 = {
                 "availabilityStatus": "Online",
-                "socketId":sid
+                "socketId":sid,
+                "gameKey": gameKey
             }
-            response1 = requests.post("https://devplay.gamergraph.io/chat/player/availability/update/", data=json.dumps(payload1), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+            response1 = requests.post("https://devplay.gamergraph.io/player/availability/update/", data=json.dumps(payload1), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
             print(response1.json())
             list_of_clients.append({sid:conn})
             print("list_of_clients: " , list_of_clients)
@@ -256,12 +260,37 @@ def createConnection(sid,payload):
     except:
         return False
 
+def getToken(sid):
+    try:
+        print(sid)
+        try:
+            token = ""
+            print("=========== Redis Data ===================")
+            print("============== cache.get(sid) ======== " ,cache.get(sid))
+            print("============End Redis Data ==================")
+
+            get_record = cache.get(sid)
+            print("get_record: " , get_record)
+            if get_record != None:
+                token = get_record['token']
+            print("token: " , token)
+            return token
+        except Exception as e:
+            print("redis error : " , e)
+        
+    except Exception as e:
+        print("error : " ,e)
+        return ""
+
 def disconnect(sid):
     try:
         print(sid)
         try:
             token = ""
             partner_sid = ""
+            print("=========== Redis Data ===================")
+            print("============== cache.get(sid) ======== " ,cache.get(sid))
+            print("============End Redis Data ==================")
             removed_record = cache.get(sid)
             print("removed_record: " , removed_record)
             if removed_record != None:
@@ -275,13 +304,24 @@ def disconnect(sid):
         
         payload1 = {
             "availabilityStatus": "Offline",
-            "socketId":""
+            "socketId":"",
+            "gameKey":""
         }
         try:
             response1 = requests.post("https://devplay.gamergraph.io/chat/player/availability/update/", data=json.dumps(payload1), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
             print("===========")
             print(response1.json())
             print("===========")
+            
+            for room in rooms:
+                payload2 = {
+                    "roomId":room['roomID']
+                }
+                response2 = requests.post("https://devplay.gamergraph.io/room/leave/", data=json.dumps(payload2), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+                print("===========")
+                print(response2.json())
+                print("===========")
+            
         except Exception as e:
             print("API error: " ,e)
             return ""
@@ -300,6 +340,7 @@ def threaded_client(conn):
         if payload['action'] == "tokenValidation":
             print("==================== Start tokenValidation =========================")
             is_true = tokenValidation(payload['sid'],payload['payload'],conn)
+
             print(is_true)
             if is_true:
                 msgfromserver = {"sid": payload['sid'] , "action": "tokenValidation" , "payload": {"token":"correct","partner_sid":"","partner_email":"","sdp":"","candidate":""}}
@@ -394,8 +435,9 @@ def threaded_client(conn):
         # ================== disconnect ==================
         if payload['action'] == 'disconnect':
             print("========== Disconnect ==============")
+            print(payload['sid'])
+            print(payload['payload']['email'])
             sid = payload['sid']
-            print("sid: " , sid)
             partner_sid = disconnect(sid)
             print("=== partner_sid ==== " ,partner_sid)
             target_conn = None
@@ -417,6 +459,16 @@ def threaded_client(conn):
                 list_of_clients.remove(obj)
             except:
                 print("Not in the list")
+            
+            for room in rooms:
+                print(room)
+                remove_obj = {"sid": payload['sid'] , "email":payload['payload']['email']}
+                try:
+                    room['members'].remove(remove_obj)
+                except:
+                    print("Not in the room")
+
+
             print("============== list_of_clients ===========" , list_of_clients)
             if target_conn:
                 msgfromserver = {"sid": partner_sid , "action": "partner" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":"" , "candidate":""}}
@@ -426,49 +478,123 @@ def threaded_client(conn):
                 byt=dataServer.encode()
                 target_conn.send(byt)
             print("========= End Disconnect ===========")
-        # ==================== Lobby =======================
-        if payload['action'] == 'lobby':
-            print("=============== Start Lobby ===================")
+        
+        if payload['action'] == 'createRoom':
+            print("=============== createRoom ===================")
+            print(payload['sid'])
+            print(payload['payload']['email'])
             print(payload['payload']['members'])
-            i = 0
-            while i < len(payload['payload']['members']):
-                j = i + 1
-                print(j)
-                while j < len(payload['payload']['members']):
-                    print("j = " , j)
-                    target_conn = None
-                    caller_conn = None
-                    for item in list_of_clients:
-                        for key, value in item.items():
-                            if key == payload['payload']['members'][j]['sid']:
-                                target_conn = value
-                            if key == payload['payload']['members'][i]['sid']:
-                                caller_conn = value
-                    msgfromserver = {"sid": payload['payload']['members'][i]['sid'] , "action": "other_user" , "payload": {"token":"" , "partner_sid":payload['payload']['members'][j]['sid'] ,"partner_email":payload['payload']['members'][j]['email'] ,"sdp":"","candidate":""}}
-                    dataServer = json.dumps(msgfromserver)
-                    print("dataServer = " , dataServer)
-                    byt=dataServer.encode()
-                    caller_conn.send(byt) 
-                    
-                    time.sleep(4)
-                    msgfromserver1 = {"sid": payload['payload']['members'][j]['sid'] , "action": "user_joined" , "payload": {"token":"" , "partner_sid":payload['payload']['members'][i]['sid'], "partner_email":payload['payload']['members'][i]['email'],"sdp":"","candidate":""}}
-                    dataServer1 = json.dumps(msgfromserver1)
-                    print("dataServer1 = " , dataServer1)
-                    byt1=dataServer1.encode()
-                    target_conn.send(byt1) 
-                    print("===============")
-                    j=j+1
-                i=i+1       
-            print("=============== End Lobby ===================")
+            print(payload['payload']['roomID'])
+            j = 0
+            obj = {"roomID": payload['payload']['roomID'] , "members":[{"sid": payload['sid'] , "email":payload['payload']['email']}]}
+            rooms.append(obj)
+            print("rooms: " , rooms)
+            while j < len(payload['payload']['members']):
+                target_conn = None
+                caller_conn = None
+                for item in list_of_clients:
+                    for key, value in item.items():
+                        if key == payload['payload']['members'][j]['sid']:
+                            target_conn = value
+                        if key == payload['sid']:
+                            caller_conn = value
+
+                msgfromserver1 = {"sid": payload['payload']['members'][j]['sid'] , "action": "lobby_invitation" , "payload": {"token":"" , "partner_sid":payload['sid'], "partner_email":payload['payload']['email'],"sdp":"","candidate":""}}
+                dataServer1 = json.dumps(msgfromserver1)
+                print("dataServer1 = " , dataServer1)
+                byt1=dataServer1.encode()
+                target_conn.send(byt1) 
+                j=j+1
+                print("=============== End createRoom ===================")
+
+        if payload['action'] == 'requestAccepted':
+            print("=============== requestAccepted ===================")
+            print(payload['sid'])
+            print(payload['payload']['email'])
+            print(payload['payload']['roomID'])
+            print(payload['payload']['requestAccepted'])
+            token = getToken(payload['sid'])
+            print(token)
+            if token:
+                payload2 = {
+                    "roomId":payload['payload']['roomID']
+                }
+                try:
+                    response2 = requests.post("https://devplay.gamergraph.io/room/join/", data=json.dumps(payload2), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+                    print("===========")
+                    print(response2.json())
+                    print("===========")
+                except Exception as e:
+                    print("API error: " ,e)
 
 
-# sudo kill -9 $(sudo lsof -t -i:8080)
+            if payload['payload']['requestAccepted'] == True:
+                for room in rooms:
+                    print(room['roomID'])
+                    if room['roomID'] == payload['payload']['roomID']:
+                        room['members'].append({"sid": payload['sid'] , "email":payload['payload']['email']})
+                print("rooms: " , rooms)
+                caller_conn = None
+                for item in list_of_clients:
+                    for key, value in item.items():
+                        if key == payload['sid']:
+                            caller_conn = value
+
+                msgfromserver1 = {"sid": payload['sid'] , "action": "user_added" , "payload": {"token":"" , "partner_sid":"", "partner_email":"","sdp":"","candidate":""}}
+                dataServer1 = json.dumps(msgfromserver1)
+                print("dataServer1 = " , dataServer1)
+                byt1=dataServer1.encode()
+                caller_conn.send(byt1) 
+
+        if payload['action'] == 'leaveRoom':
+            print("=============== leaveRoom ===================")
+            print(payload['sid'])
+            print(payload['payload']['email'])
+            print(payload['payload']['roomID'])
+            token = getToken(payload['sid'])
+            print(token)
+            if token:
+                payload2 = {
+                    "roomId":payload['payload']['roomID']
+                }
+                try:
+                    response2 = requests.post("https://devplay.gamergraph.io/room/leave/", data=json.dumps(payload2), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+                    print("===========")
+                    print(response2.json())
+                    print("===========")
+                except Exception as e:
+                    print("API error: " ,e)
+
+            check = False
+            for room in rooms:
+                print(room['roomID'])
+                if room['roomID'] == payload['payload']['roomID']:
+                    obj = {"sid": payload['sid'] , "email":payload['payload']['email']}
+                    try:
+                        room['members'].remove(obj)
+                        check = True
+                    except:
+                        print("Not in the room")
+            print("rooms: " , rooms)
+            if check == True:
+                caller_conn = None
+                for item in list_of_clients:
+                    for key, value in item.items():
+                        if key == payload['sid']:
+                            caller_conn = value
+                
+                msgfromserver1 = {"sid": payload['sid'] , "action": "user_removed" , "payload": {"token":"" , "partner_sid":"", "partner_email":"","sdp":"","candidate":""}}
+                dataServer1 = json.dumps(msgfromserver1)
+                print("dataServer1 = " , dataServer1)
+                byt1=dataServer1.encode()
+                caller_conn.send(byt1)
 
 while True: 
     conn, addr = s.accept()     
-    
+
     print ('Got connection from', addr )
 
     start_new_thread(threaded_client, (conn, ))
     ThreadCount += 1
     print('Thread Number: ' + str(ThreadCount))
+
