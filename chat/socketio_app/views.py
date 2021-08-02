@@ -220,13 +220,14 @@ def tokenValidation(sid,payload,conn):
             }
             response1 = requests.post("https://devplay.gamergraph.io/player/availability/update/", data=json.dumps(payload1), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
             print(response1.json())
-            list_of_clients.append({sid:conn})
+            # list_of_clients.append({sid:conn})
+            list_of_clients.append({"sid": sid ,"email":email, "partner_sid":"","token":token,"conn":conn})
             print("list_of_clients: " , list_of_clients)
-            obj = {"sid":sid, "email":email,"partner_sid":"","token":token}
-            cache.add(sid,obj,timeout=CACHE_TTL)
-            print("=========== Redis Data ===================")
-            print(cache.get(sid))
-            print("============End Redis Data ==================")
+            # obj = {"sid":sid, "email":email,"partner_sid":"","token":token}
+            # cache.add(sid,obj,timeout=CACHE_TTL)
+            # print("=========== Redis Data ===================")
+            # print(cache.get(sid))
+            # print("============End Redis Data ==================")
             return True
 
         else:
@@ -263,24 +264,68 @@ def createConnection(sid,payload):
 def getToken(sid):
     try:
         print(sid)
-        try:
-            token = ""
-            print("=========== Redis Data ===================")
-            print("============== cache.get(sid) ======== " ,cache.get(sid))
-            print("============End Redis Data ==================")
-
-            get_record = cache.get(sid)
-            print("get_record: " , get_record)
-            if get_record != None:
-                token = get_record['token']
-            print("token: " , token)
-            return token
-        except Exception as e:
-            print("redis error : " , e)
-        
+        token=""
+        partner_sid = ""
+        for client in list_of_clients:
+            print("client: " , client)
+            print("client sid: " ,client['sid'])
+            if client['sid'] == sid:
+                token = client['token']
+                partner_sid = client['partner_sid']
+        return token,partner_sid
     except Exception as e:
         print("error : " ,e)
         return ""
+
+# def disconnect(sid):
+#     try:
+#         print(sid)
+#         try:
+#             token = ""
+#             partner_sid = ""
+#             print("=========== Redis Data ===================")
+#             print("============== cache.get(sid) ======== " ,cache.get(sid))
+#             print("============End Redis Data ==================")
+#             removed_record = cache.get(sid)
+#             print("removed_record: " , removed_record)
+#             if removed_record != None:
+#                 token = removed_record['token']
+#                 partner_sid = removed_record['partner_sid']
+#             print("removed_record token: " , token)
+#             cache.delete(sid)
+#             print("====== Deleted record ===========")
+#         except Exception as e:
+#             print("redis error : " , e)
+        
+#         payload1 = {
+#             "availabilityStatus": "Offline",
+#             "socketId":"",
+#             "gameKey":""
+#         }
+#         try:
+#             response1 = requests.post("https://devplay.gamergraph.io/chat/player/availability/update/", data=json.dumps(payload1), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+#             print("===========")
+#             print(response1.json())
+#             print("===========")
+            
+#             for room in rooms:
+#                 payload2 = {
+#                     "roomId":room['roomID']
+#                 }
+#                 response2 = requests.post("https://devplay.gamergraph.io/room/leave/", data=json.dumps(payload2), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+#                 print("===========")
+#                 print(response2.json())
+#                 print("===========")
+            
+#         except Exception as e:
+#             print("API error: " ,e)
+#             return ""
+
+#         print('Disconnected', sid)
+#         return partner_sid
+#     except Exception as e:
+#         print("error : " ,e)
+#         return ""
 
 def disconnect(sid):
     try:
@@ -288,19 +333,11 @@ def disconnect(sid):
         try:
             token = ""
             partner_sid = ""
-            print("=========== Redis Data ===================")
-            print("============== cache.get(sid) ======== " ,cache.get(sid))
-            print("============End Redis Data ==================")
-            removed_record = cache.get(sid)
-            print("removed_record: " , removed_record)
-            if removed_record != None:
-                token = removed_record['token']
-                partner_sid = removed_record['partner_sid']
-            print("removed_record token: " , token)
-            cache.delete(sid)
-            print("====== Deleted record ===========")
+            token,partner_sid = getToken(sid)
+            print("token: " , token)
+            print("partner_sid: " , partner_sid)
         except Exception as e:
-            print("redis error : " , e)
+            print("error : " , e)
         
         payload1 = {
             "availabilityStatus": "Offline",
@@ -308,7 +345,7 @@ def disconnect(sid):
             "gameKey":""
         }
         try:
-            response1 = requests.post("https://devplay.gamergraph.io/chat/player/availability/update/", data=json.dumps(payload1), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+            response1 = requests.post("https://devplay.gamergraph.io/player/availability/update/", data=json.dumps(payload1), headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
             print("===========")
             print(response1.json())
             print("===========")
@@ -331,6 +368,8 @@ def disconnect(sid):
     except Exception as e:
         print("error : " ,e)
         return ""
+
+
 
 def threaded_client(conn):
     while True:
@@ -355,19 +394,36 @@ def threaded_client(conn):
         # ================== createConnection ==================
         if payload['action'] == 'createConnection':
             print("================== createConnection ==================" , list_of_clients)
-            caller_id,target_id = createConnection(payload['sid'],payload['payload'])
-            print("caller_id: ", caller_id)
-            print("target_id: " , target_id)
+            print(payload['payload']['caller'])
+            print(payload['payload']['target'])
             target_conn = None
-            for item in list_of_clients:
-                for key, value in item.items():
-                    if key == caller_id:
-                        caller_conn = value
-                    if key == target_id:
-                        target_conn = value
-            
+            caller_conn = None
+            for client in list_of_clients:
+                print("client sid: " ,client['sid'])
+                if client['sid'] == payload['payload']['caller']['sid']:
+                    caller_conn = client['conn']
+                    client['partner_sid'] = payload['payload']['target']['sid']
+                if client['sid'] == payload['payload']['target']['sid']:
+                    target_conn = client['conn']
+                    client['partner_sid'] = payload['payload']['caller']['sid']
+
+            print("================== createConnection 1 ==================" , list_of_clients)
             print("caller_conn: " , caller_conn)
             print("target_conn: " , target_conn)
+
+            # caller_id,target_id = createConnection(payload['sid'],payload['payload'])
+            # print("caller_id: ", caller_id)
+            # print("target_id: " , target_id)
+            # target_conn = None
+            # for item in list_of_clients:
+            #     for key, value in item.items():
+            #         if key == caller_id:
+            #             caller_conn = value
+            #         if key == target_id:
+            #             target_conn = value
+            
+            # print("caller_conn: " , caller_conn)
+            # print("target_conn: " , target_conn)
 
             # ======================== PAYLOAD ==========================
             msgfromserver = {"sid": payload['sid'] , "action": "other_user" , "payload": {"token":"" , "partner_sid":payload['payload']['target']['sid'],"partner_email":payload['payload']['target']['email'],"sdp":"","candidate":""}}
@@ -387,12 +443,19 @@ def threaded_client(conn):
         if payload['action'] == 'offer':
             print("=================== Offer ==============")
             print(payload['payload']['target']['sid'])
-            for item in list_of_clients:
-                for key, value in item.items():
-                    if key == payload['payload']['target']['sid']:
-                        target_conn = value
+            target_conn = None
+            for client in list_of_clients:
+                print("client sid: " ,client['sid'])
+                if client['sid'] == payload['payload']['target']['sid']:
+                    target_conn = client['conn']
 
             print("target_conn: " , target_conn)
+
+            # for item in list_of_clients:
+            #     for key, value in item.items():
+            #         if key == payload['payload']['target']['sid']:
+            #             target_conn = value
+
             msgfromserver = {"sid": payload['payload']['target']['sid'] , "action": "offer" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":payload['payload']['sdp'],"candidate":""}}
             dataServer = json.dumps(msgfromserver)
             print("dataServer = " , dataServer)
@@ -403,12 +466,20 @@ def threaded_client(conn):
         if payload['action'] == 'answer':
             print("=================== Answer ==============")
             print(payload['payload']['target']['sid'])
-            for item in list_of_clients:
-                for key, value in item.items():
-                    if key == payload['payload']['target']['sid']:
-                        target_conn = value
+            target_conn = None
+            for client in list_of_clients:
+                print("client sid: " ,client['sid'])
+                if client['sid'] == payload['payload']['target']['sid']:
+                    target_conn = client['conn']
 
             print("target_conn: " , target_conn)
+
+            # for item in list_of_clients:
+            #     for key, value in item.items():
+            #         if key == payload['payload']['target']['sid']:
+            #             target_conn = value
+
+            # print("target_conn: " , target_conn)
             msgfromserver = {"sid": payload['payload']['target']['sid'] , "action": "answer" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":payload['payload']['sdp'],"candidate":""}}
             dataServer = json.dumps(msgfromserver)
             print("dataServer = " , dataServer)
@@ -419,13 +490,21 @@ def threaded_client(conn):
         if payload['action'] == 'ice_candidate':
             print("=================== ice_candidate ==============")
             print("target_sid: " , payload['payload']['target']['sid'])
-            for item in list_of_clients:
-                for key, value in item.items():
-                    print("=== key , value ======" ,key, value)
-                    if key == payload['payload']['target']['sid']:
-                        target_conn = value
+            target_conn = None
+            for client in list_of_clients:
+                print("client sid: " ,client['sid'])
+                if client['sid'] == payload['payload']['target']['sid']:
+                    target_conn = client['conn']
 
             print("target_conn: " , target_conn)
+
+            # for item in list_of_clients:
+            #     for key, value in item.items():
+            #         print("=== key , value ======" ,key, value)
+            #         if key == payload['payload']['target']['sid']:
+            #             target_conn = value
+
+            # print("target_conn: " , target_conn)
             msgfromserver = {"sid": payload['payload']['target']['sid'] , "action": "ice_candidate" , "payload": {"token":"" , "partner_sid":payload['sid'],"partner_email":"" , "sdp":"" , "candidate":payload['payload']['candidate']}}
             dataServer = json.dumps(msgfromserver)
             print("dataServer = " , dataServer)
@@ -442,23 +521,37 @@ def threaded_client(conn):
             print("=== partner_sid ==== " ,partner_sid)
             target_conn = None
             caller_conn = None
-            for item in list_of_clients:
-                for key, value in item.items():
-                    if key == partner_sid:
-                        target_conn = value
-                    if key == sid:
-                        caller_conn = value
+            for client in list_of_clients:
+                print("client sid: " ,client['sid'])
+                if client['sid'] == partner_sid:
+                    target_conn = client['conn']
+
+
+            # for item in list_of_clients:
+            #     for key, value in item.items():
+            #         if key == partner_sid:
+            #             target_conn = value
+            #         if key == sid:
+            #             caller_conn = value
             
             
             print("caller_conn: " , caller_conn)
             print("target_conn: " , target_conn)
             # Remove from list_of_clients
-            obj = {sid:caller_conn}
-            print("obj :" , obj)
-            try:
-                list_of_clients.remove(obj)
-            except:
-                print("Not in the list")
+            for client in list_of_clients:
+                print("client sid: " ,client['sid'])
+                if client['sid'] == sid:
+                    try:
+                        list_of_clients.remove(client)
+                    except:
+                        print("Not in the list")
+            # obj = {sid:caller_conn}
+            # print("obj :" , obj)
+            # try:
+            #     list_of_clients.remove(obj)
+            # except:
+            #     print("Not in the list")
+            
             
             for room in rooms:
                 print(room)
@@ -492,12 +585,10 @@ def threaded_client(conn):
             while j < len(payload['payload']['members']):
                 target_conn = None
                 caller_conn = None
-                for item in list_of_clients:
-                    for key, value in item.items():
-                        if key == payload['payload']['members'][j]['sid']:
-                            target_conn = value
-                        if key == payload['sid']:
-                            caller_conn = value
+                for client in list_of_clients:
+                    print("client: " ,client)
+                    if client['sid'] == payload['payload']['members'][j]['sid']:
+                        target_conn = client['conn']
 
                 msgfromserver1 = {"sid": payload['payload']['members'][j]['sid'] , "action": "lobby_invitation" , "payload": {"token":"" , "partner_sid":payload['sid'], "partner_email":payload['payload']['email'],"sdp":"","candidate":""}}
                 dataServer1 = json.dumps(msgfromserver1)
@@ -513,8 +604,9 @@ def threaded_client(conn):
             print(payload['payload']['email'])
             print(payload['payload']['roomID'])
             print(payload['payload']['requestAccepted'])
-            token = getToken(payload['sid'])
+            token,partner_sid = getToken(payload['sid'])
             print(token)
+            print(partner_sid)
             if token:
                 payload2 = {
                     "roomId":payload['payload']['roomID']
@@ -535,10 +627,10 @@ def threaded_client(conn):
                         room['members'].append({"sid": payload['sid'] , "email":payload['payload']['email']})
                 print("rooms: " , rooms)
                 caller_conn = None
-                for item in list_of_clients:
-                    for key, value in item.items():
-                        if key == payload['sid']:
-                            caller_conn = value
+                for client in list_of_clients:
+                    print("client: " ,client)
+                    if client['sid'] == payload['sid']:
+                        caller_conn = client['conn']
 
                 msgfromserver1 = {"sid": payload['sid'] , "action": "user_added" , "payload": {"token":"" , "partner_sid":"", "partner_email":"","sdp":"","candidate":""}}
                 dataServer1 = json.dumps(msgfromserver1)
@@ -551,8 +643,9 @@ def threaded_client(conn):
             print(payload['sid'])
             print(payload['payload']['email'])
             print(payload['payload']['roomID'])
-            token = getToken(payload['sid'])
+            token,partner_sid = getToken(payload['sid'])
             print(token)
+            print(partner_sid)
             if token:
                 payload2 = {
                     "roomId":payload['payload']['roomID']
@@ -578,10 +671,10 @@ def threaded_client(conn):
             print("rooms: " , rooms)
             if check == True:
                 caller_conn = None
-                for item in list_of_clients:
-                    for key, value in item.items():
-                        if key == payload['sid']:
-                            caller_conn = value
+                for client in list_of_clients:
+                    print("client: " ,client)
+                    if client['sid'] == payload['sid']:
+                        caller_conn = client['conn']
                 
                 msgfromserver1 = {"sid": payload['sid'] , "action": "user_removed" , "payload": {"token":"" , "partner_sid":"", "partner_email":"","sdp":"","candidate":""}}
                 dataServer1 = json.dumps(msgfromserver1)
