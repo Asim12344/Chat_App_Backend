@@ -682,6 +682,28 @@ def threaded_client(conn):
                 byt1=dataServer1.encode()
                 caller_conn.send(byt1)
 
+        if payload['action'] == 'communicateGameMove':
+            print("=============== communicateGameMove ===================")
+            print(payload['sid'])
+            print(payload['payload']['email'])
+            print(payload['payload']['roomID'])
+            print(payload['payload']['message'])
+            print("rooms: " , rooms)
+            for room in rooms:
+                if room['roomID'] == payload['payload']['roomID']:
+                    for member in room['members']:
+                        target_conn = None
+                        caller_conn = None
+                        for client in list_of_clients:
+                            if client['sid'] == member['sid'] and member['sid'] != payload['sid']:
+                                target_conn = client['conn']
+                        if target_conn:
+                            msgfromserver1 = {"sid": member['sid'] , "action": "player_move" , "payload": {"token":"" , "partner_sid":payload['sid'], "partner_email":payload['payload']['email'],"sdp":"","candidate":"" , "roomID":payload['payload']['roomID'] , "message": payload['payload']['message']}}
+                            dataServer1 = json.dumps(msgfromserver1)
+                            byt1=dataServer1.encode()
+                            target_conn.send(byt1) 
+            print("=============== End communicateGameMove ===================")            
+
 while True: 
     conn, addr = s.accept()     
 
