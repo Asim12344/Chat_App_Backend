@@ -590,7 +590,7 @@ def threaded_client(conn):
                     if client['sid'] == payload['payload']['members'][j]['sid']:
                         target_conn = client['conn']
 
-                msgfromserver1 = {"sid": payload['payload']['members'][j]['sid'] , "action": "lobby_invitation" , "payload": {"token":"" , "partner_sid":payload['sid'], "partner_email":payload['payload']['email'],"sdp":"","candidate":""}}
+                msgfromserver1 = {"sid": payload['payload']['members'][j]['sid'] , "action": "lobby_invitation" , "payload": {"token":"" , "partner_sid":payload['sid'], "partner_email":payload['payload']['email'],"sdp":"","candidate":"" , "roomID":payload['payload']['roomID']}}
                 dataServer1 = json.dumps(msgfromserver1)
                 print("dataServer1 = " , dataServer1)
                 byt1=dataServer1.encode()
